@@ -345,7 +345,7 @@ export class JavaContext {
         });
         rootClassLoader.defineNativeCode("java/lang/Class#registerNatives()V", async () => {
             rootClassLoader.defineNativeCode("java/lang/Class#getName0()Ljava/lang/String;", async (object) => {
-                let name = object.nativeClass.name;
+                let name = object.nativeClass.name.replaceAll("/", ".");
                 return await this.javaString(name);
             });
             rootClassLoader.defineNativeCode("java/lang/Class#desiredAssertionStatus0(Ljava/lang/Class;)Z", async (object) => {
