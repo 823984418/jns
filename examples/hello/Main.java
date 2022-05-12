@@ -32,14 +32,17 @@ public class Main extends OutputStream {
     }
 
     public static void main(String[] args) throws Exception {
-        System.setOut(new PrintStream(new BufferedOutputStream(new Main())));
-        System.out.println("Hello " + "world? " + 114514);
-        System.out.println("你好");
-        System.out.println("1 + 2 + ... + 100 = " + sumTo(100));
-        StringWriter writer = new StringWriter();
-        new Exception().printStackTrace(new PrintWriter(writer));
-        System.out.println(writer.getBuffer());
-        System.out.println(Class.forName("java.lang.Object"));
-        System.out.flush();
+        try {
+            System.setOut(new PrintStream(new BufferedOutputStream(new Main())));
+            System.out.println("Hello " + "world? " + 114514);
+            System.out.println("你好");
+            System.out.println("1 + 2 + ... + 100 = " + sumTo(100));
+            StringWriter writer = new StringWriter();
+            new Exception().printStackTrace(new PrintWriter(writer));
+            System.out.println(writer.getBuffer());
+            System.out.println(Class.forName("java.lang.Object"));
+        } finally {
+            System.out.flush();
+        }
     }
 }

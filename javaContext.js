@@ -97,7 +97,7 @@ export class JavaThread {
             let nItem = this.stack[i];
             array.nativeArray[i] = await classLoader.newInstanceWith("java/lang/StackTraceElement",
                 "Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I",
-                await context.javaString(nItem.declaringClass.name),
+                await context.javaString(nItem.declaringClass.name.replaceAll("/", ".")),
                 await context.javaString(nItem.method.name),
                 await context.javaString(nItem.file),
                 nItem.line,
