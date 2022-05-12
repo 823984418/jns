@@ -1,5 +1,13 @@
 import {Opcode, opcodeToString} from "./javaOpcode.js";
-import {JavaAccessFlags, JavaClass, JavaClassLoader, JavaContext, JavaField, JavaMethod, JavaType} from "./javaContext.js";
+import {
+    JavaAccessFlags,
+    JavaClass,
+    JavaClassLoader,
+    JavaContext,
+    JavaField,
+    JavaMethod,
+    JavaType
+} from "./javaContext.js";
 import {
     JavaConstantClass, JavaConstantDouble,
     JavaConstantFloat,
@@ -7,6 +15,33 @@ import {
     JavaConstantPool,
     JavaConstantString
 } from "./javaConstantPool.js";
+
+export class JavaClassSource {
+    /**
+     * @param {string} name
+     * @return {Promise<ArrayBuffer>}
+     */
+    async findClassFile(name) {
+        return null;
+    }
+}
+
+export class JavaFetchClassSource extends JavaClassSource {
+    constructor(urlBase) {
+        super();
+        this.urlBase = urlBase;
+    }
+
+    urlBase;
+
+    async findClassFile(name) {
+        let response = await fetch(this.urlBase + name);
+        if (response.ok) {
+            return await response.arrayBuffer();
+        }
+        return null;
+    }
+}
 
 export class JavaFileClassLoader extends JavaClassLoader {
     /**
@@ -40,18 +75,20 @@ export class JavaFileClassLoader extends JavaClassLoader {
     }
 }
 
-export class FetchJavaClassLoader extends JavaFileClassLoader {
+export class JavaSourceClassLoader extends JavaFileClassLoader {
     /**
      * @param {JavaClassLoader} parentClassLoader
+     * @param {JavaClassSource[]} sources
      */
-    constructor(parentClassLoader) {
+    constructor(parentClassLoader, sources) {
         super(parentClassLoader);
+        this.sources = sources;
     }
 
     /**
-     * @type {string}
+     * @type {JavaClassSource[]}
      */
-    urlBase = "rt/";
+    sources;
 
     /**
      * @param {string} name
@@ -62,16 +99,16 @@ export class FetchJavaClassLoader extends JavaFileClassLoader {
         if (superFindClass != null) {
             return superFindClass;
         }
-        let response = await fetch(this.urlBase + name + ".class");
-        if (response.ok) {
-            let arrayBuffer = await response.arrayBuffer();
-            return this.defineClassFile(new DataView(arrayBuffer));
-        } else {
-            return null;
+        let sources = this.sources;
+        for (let i = 0; i < sources.length; i++) {
+            let source = sources[i];
+            let classFile = await source.findClassFile(name + ".class");
+            if (classFile != null) {
+                return this.defineClassFile(new DataView(classFile));
+            }
         }
-
+        return null;
     }
-
 }
 
 export class JavaFileClass extends JavaClass {
