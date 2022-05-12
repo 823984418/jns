@@ -7,6 +7,7 @@ let context = new JavaContext();
 let USE_JAR = true;
 
 let urlBase;
+document.body.innerText += "加载中，请稍后\n";
 let testLocalRt = await fetch("../../rt/META-INF/MANIFEST.MF");
 if (!testLocalRt.ok) {
     urlBase = "https://823984418.github.io/java_runtime/jdk8u231/";
