@@ -4,6 +4,8 @@ import {JavaFetchClassSource, JavaSourceClassLoader} from "../../javaFileClassLo
 
 let context = new JavaContext();
 
+let USE_JAR = true;
+
 let urlBase;
 let testLocalRt = await fetch("../../rt/META-INF/MANIFEST.MF");
 if (!testLocalRt.ok) {
@@ -12,12 +14,15 @@ if (!testLocalRt.ok) {
     urlBase = "../../rt/";
 }
 
-let jarFile = await new JSZip().loadAsync(await (await fetch("../../min_rt.jar")).arrayBuffer());
+let classSources = [];
+if (USE_JAR) {
+    let jarFile = await new JSZip().loadAsync(await (await fetch("../../min_rt.jar")).arrayBuffer());
+    classSources.push(new JavaJarClassSource(jarFile));
+}
 
-let classLoader = new JavaSourceClassLoader(null, [
-    new JavaJarClassSource(jarFile),
-    new JavaFetchClassSource(urlBase),
-]);
+classSources.push(new JavaFetchClassSource(urlBase));
+
+let classLoader = new JavaSourceClassLoader(null, classSources);
 
 context.setRootClassLoader(classLoader);
 // JavaContext.DEBUG = true;
