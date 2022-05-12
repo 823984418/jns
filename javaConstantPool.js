@@ -1,4 +1,4 @@
-import {AccessFlags, JavaType} from "./javaContext.js";
+import {JavaAccessFlags, JavaType} from "./javaContext.js";
 
 export class JavaConstant {
     static TAG = -1;
@@ -234,7 +234,7 @@ export class JavaConstantFieldRef extends JavaConstant {
                 let c = classRef;
                 while (c != null) {
                     let f = c.fieldMap.get(nameAndType.name + ":" + nameAndType.signature);
-                    if (f != null && (f.accessFlags & AccessFlags.PRIVATE) === 0) {
+                    if (f != null && (f.accessFlags & JavaAccessFlags.PRIVATE) === 0) {
                         this.ref = f;
                         break;
                     }
@@ -292,7 +292,7 @@ export class JavaConstantMethodRef extends JavaConstant {
                 let c = classRef;
                 while (c != null) {
                     let m = c.methodMap.get(nameAndType.name + nameAndType.signature);
-                    if (m != null && (m.accessFlags & (AccessFlags.PRIVATE)) === 0) {
+                    if (m != null && (m.accessFlags & (JavaAccessFlags.PRIVATE)) === 0) {
                         this.ref = m;
                         break;
                     }
@@ -350,7 +350,7 @@ export class JavaConstantInterfaceMethod extends JavaConstant {
                 let c = classRef;
                 while (c != null) {
                     let m = c.methodMap.get(nameAndType.name + nameAndType.signature);
-                    if (m != null && (m.accessFlags & (AccessFlags.STATIC | AccessFlags.PRIVATE)) === 0) {
+                    if (m != null && (m.accessFlags & (JavaAccessFlags.STATIC | JavaAccessFlags.PRIVATE)) === 0) {
                         this.ref = m;
                         break;
                     }

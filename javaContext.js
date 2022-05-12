@@ -107,7 +107,7 @@ export class JavaThread {
     }
 }
 
-export class AccessFlags {
+export class JavaAccessFlags {
     /** class, field, method */
     static PUBLIC = 0x0001;
     /** class, field, method */
@@ -380,7 +380,7 @@ export class JavaContext {
                 return thisObject.nativeClass.primitiveName != null;
             });
             rootClassLoader.defineNativeCode("java/lang/Class#isInterface()Z", async (thisObject) => {
-                return (thisObject.nativeClass.accessFlags & AccessFlags.INTERFACE) !== 0;
+                return (thisObject.nativeClass.accessFlags & JavaAccessFlags.INTERFACE) !== 0;
             });
         });
         rootClassLoader.defineNativeCode("java/lang/ClassLoader#registerNatives()V", async () => {
@@ -971,7 +971,7 @@ export class JavaClass {
                 };
                 continue;
             }
-            if ((method.accessFlags & AccessFlags.STATIC) === 0) {
+            if ((method.accessFlags & JavaAccessFlags.STATIC) === 0) {
                 virtualTable[`${method.name}${method.descriptor}`] = async function (...args) {
                     return await method.invokeSpecial(this, ...args);
                 };
@@ -981,7 +981,7 @@ export class JavaClass {
         }
         let staticTable = this.staticTable = {};
         for (let f of this.fieldMap.values()) {
-            if ((f.accessFlags & AccessFlags.STATIC) === 0) {
+            if ((f.accessFlags & JavaAccessFlags.STATIC) === 0) {
                 continue;
             }
             let value;
@@ -1046,7 +1046,7 @@ export class JavaClass {
         let object = Object.create(this.virtualTable);
         for (let c = this; c != null; c = await c.getSuperClass()) {
             for (let f of c.fieldMap.values()) {
-                if ((f.accessFlags & AccessFlags.STATIC) !== 0) {
+                if ((f.accessFlags & JavaAccessFlags.STATIC) !== 0) {
                     continue;
                 }
                 let value;

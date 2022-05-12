@@ -1,5 +1,5 @@
 import {Opcode, opcodeToString} from "./javaOpcode.js";
-import {AccessFlags, JavaClass, JavaClassLoader, JavaContext, JavaField, JavaMethod, JavaType} from "./javaContext.js";
+import {JavaAccessFlags, JavaClass, JavaClassLoader, JavaContext, JavaField, JavaMethod, JavaType} from "./javaContext.js";
 import {
     JavaConstantClass, JavaConstantDouble,
     JavaConstantFloat,
@@ -307,7 +307,7 @@ export class JavaFileMethod extends JavaMethod {
             if (this.code != null) {
                 return await this.code.invoke(...args);
             }
-            if ((this.accessFlags & AccessFlags.NATIVE) !== 0) {
+            if ((this.accessFlags & JavaAccessFlags.NATIVE) !== 0) {
                 return await this.defineClass.classLoader.nativeCode(this, ...args);
             }
             throw new Error();
@@ -333,7 +333,7 @@ export class JavaFileMethod extends JavaMethod {
             if (this.code != null) {
                 return await this.code.invoke(...args);
             }
-            if ((this.accessFlags & AccessFlags.NATIVE) !== 0) {
+            if ((this.accessFlags & JavaAccessFlags.NATIVE) !== 0) {
                 return await this.defineClass.classLoader.nativeCode(this, ...args);
             }
             throw new Error();
@@ -476,7 +476,7 @@ export class JavaFileCode {
         }
         let locals = new Array(this.maxLocals);
         locals.length = 0;
-        if ((this.method.accessFlags & AccessFlags.STATIC) === 0) {
+        if ((this.method.accessFlags & JavaAccessFlags.STATIC) === 0) {
             locals.push(args.shift());
         }
         for (let i = 0; i < this.method.type.P.length; i++) {
