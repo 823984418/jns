@@ -579,11 +579,11 @@ export class JavaFileCode {
                         stack.push(2);
                         break;
                     case Opcode.dconst_0:
-                        stack.push(BigInt("0"));
+                        stack.push(0);
                         stack.push(null);
                         break;
                     case Opcode.dconst_1:
-                        stack.push(BigInt("1"));
+                        stack.push(1);
                         stack.push(null);
                         break;
                     case Opcode.bipush: {
@@ -1491,7 +1491,9 @@ export class JavaFileCode {
                         break;
                     }
                     case Opcode.lcmp: {
+                        stack.pop();
                         let val1 = stack.pop();
+                        stack.pop();
                         let val2 = stack.pop();
                         if (val2 > val1) {
                             stack.push(1);

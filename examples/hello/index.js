@@ -40,6 +40,9 @@ async function main() {
     classLoader.defineClassFile(new DataView(await (await fetch("Main.class")).arrayBuffer()));
     let main = await classLoader.loadClass("Main");
     await main.methodMap.get("main([Ljava/lang/String;)V").invokeStatic(null);
+    console.time("a");
+    await main.methodMap.get("main([Ljava/lang/String;)V").invokeStatic(null);
+    console.timeEnd("a");
 }
 
 try {

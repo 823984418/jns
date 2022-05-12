@@ -23,20 +23,21 @@ public class Main extends OutputStream {
         innerTextAppend(new String(b, off, len));
     }
 
-    static int sumTo(int a) {
-        int sum = 0;
+    static double sumTo(int a) {
+        double sum = 0;
         for (int i = 0; i <= a; i++) {
-            sum += i;
+            sum += Math.sin(i);
         }
         return sum;
     }
 
     public static void main(String[] args) throws Exception {
         try {
-            System.setOut(new PrintStream(new BufferedOutputStream(new Main())));
+            System.setOut(new PrintStream(new BufferedOutputStream(new Main()), true));
             System.out.println("Hello " + "world? " + 114514);
             System.out.println("你好");
-            System.out.println("1 + 2 + ... + 100 = " + sumTo(100));
+            int n = 100000;
+            System.out.println("sin(1) + sin(2) + ... + sin(" + n + ") = " + sumTo(n));
             StringWriter writer = new StringWriter();
             new Exception().printStackTrace(new PrintWriter(writer));
             System.out.println(writer.getBuffer());

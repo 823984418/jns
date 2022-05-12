@@ -412,6 +412,9 @@ export class JavaContext {
         rootClassLoader.defineNativeCode("java/security/AccessController#getStackAccessControlContext()Ljava/security/AccessControlContext;", async () => {
             return null;
         });
+        rootClassLoader.defineNativeCode("java/lang/StrictMath#sin(D)D", async (value) => {
+            return Math.sin(value);
+        });
         rootClassLoader.defineNativeCode("java/lang/System#setOut0(Ljava/io/PrintStream;)V", async (out) => {
             let systemClass = await rootClassLoader.loadClass("java/lang/System");
             systemClass.staticTable["out"] = out;
