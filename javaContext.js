@@ -1036,6 +1036,11 @@ export class JavaClass {
             staticTable[f.name] = value;
         }
 
+        let interfaces = await this.getInterfaces();
+        for (let i = 0; i < interfaces.length; i++) {
+            this.superClassAndInterfaceSet.add(interfaces[i]);
+        }
+
         context.currentThread = currentThread;
         await this.methodMap.get("<clinit>()V")?.invokeStatic();
         context.currentThread = currentThread;
@@ -1125,6 +1130,13 @@ export class JavaClass {
      */
     async getSuperClass() {
         throw new Error();
+    }
+
+    /**
+     * @return {Promise<JavaClass[]>}
+     */
+    async getInterfaces() {
+        return [];
     }
 
 }

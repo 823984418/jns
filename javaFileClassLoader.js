@@ -136,17 +136,6 @@ export class JavaFileClass extends JavaClass {
     interfaces;
 
     /**
-     * @return {Promise<void>}
-     */
-    async init() {
-        await super.init();
-        for (let i = 0; i < this.interfaces.length; i++) {
-            let theI = this.interfaces[i];
-            this.superClassAndInterfaceSet.add(await theI.getClassRef());
-        }
-    }
-
-    /**
      * @param {DataView} dataView
      * @param {number} offset
      * @return {number}
@@ -197,10 +186,31 @@ export class JavaFileClass extends JavaClass {
             let useOffset = offset + length;
             switch (name) {
                 case "SourceFile":
-                    console.assert(length === 2);
                     this.sourceFile = this.constantPool.getUtf8(dataView.getUint16(offset)).utf8;
                     offset += 2;
                     break;
+                case "Signature":
+                    this.signature = this.constantPool.getUtf8(dataView.getUint16(offset)).utf8;
+                    offset += 2;
+                    break;
+                case "InnerClasses": {
+                    let length = dataView.getUint16(offset);
+                    offset += 2;
+                    let innerClasses = this.innerClasses = new Array(length);
+                    for (let i = 0; i < length; i++) {
+                        let innerClassItem = {};
+                        innerClassItem.thisClass = this.constantPool.getClass(dataView.getUint16(offset));
+                        offset += 2;
+                        innerClassItem.outerClass = this.constantPool.getClass(dataView.getUint16(offset));
+                        offset += 2;
+                        innerClassItem.innerName = this.constantPool.getUtf8(dataView.getUint16(offset))?.utf8;
+                        offset += 2;
+                        innerClassItem.access = dataView.getUint16(offset);
+                        offset += 2;
+                        innerClasses[i] = innerClassItem;
+                    }
+                    break;
+                }
                 default:
                     console.warn(`Unknown class attribute ${name} length ${length}`);
                     offset += length;
@@ -216,6 +226,17 @@ export class JavaFileClass extends JavaClass {
      */
     async getSuperClass() {
         return await this.superClass?.getClassRef();
+    }
+
+    /**
+     * @return {Promise<JavaClass[]>}
+     */
+    async getInterfaces() {
+        let r = new Array(this.interfaces.length);
+        for (let i = 0; i < this.interfaces.length; i++) {
+            r[i] = await this.interfaces[i].getClassRef();
+        }
+        return r;
     }
 
 }
@@ -255,6 +276,13 @@ export class JavaFileField extends JavaField {
                 case "ConstantValue":
                     this.constantValue = this.constantPool.get(dataView.getUint16(offset));
                     offset += 2;
+                    break;
+                case "Signature":
+                    this.signature = this.constantPool.getUtf8(dataView.getUint16(offset)).utf8;
+                    offset += 2;
+                    break;
+                case "Deprecated":
+                    this.deprecated = true;
                     break;
                 default:
                     console.warn(`Unknown field attribute ${name} length ${length}`);
@@ -321,8 +349,15 @@ export class JavaFileMethod extends JavaMethod {
                     code.constantPool = this.constantPool;
                     offset = code.read(dataView, offset);
                     break;
+                case "Signature":
+                    this.signature = this.constantPool.getUtf8(dataView.getUint16(offset)).utf8;
+                    offset += 2;
+                    break;
+                case "Deprecated":
+                    this.deprecated = true;
+                    break;
                 default:
-                    console.warn(`Unknown class attribute ${name} length ${length}`);
+                    console.warn(`Unknown method attribute ${name} length ${length}`);
                     offset += length;
             }
             console.assert(useOffset === offset);
