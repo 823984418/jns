@@ -1,8 +1,8 @@
-import {Opcode, opcodeToString} from "./javaOpcode.js";
 import {
     JavaAccessFlags,
     JavaClass,
     JavaClassLoader,
+    JavaCode,
     JavaContext,
     JavaField,
     JavaMethod,
@@ -15,6 +15,7 @@ import {
     JavaConstantPool,
     JavaConstantString
 } from "./javaConstantPool.js";
+import {Opcode, opcodeToString} from "./javaOpcode.js";
 
 export class JavaClassSource {
     /**
@@ -296,130 +297,6 @@ export class JavaFileField extends JavaField {
 
 }
 
-export class JavaFileMethod extends JavaMethod {
-    /**
-     * @param {JavaFileClass} c
-     */
-    constructor(c) {
-        super(c);
-        this.constantPool = c.constantPool;
-    }
-
-    /**
-     * @type {JavaConstantPool}
-     */
-    constantPool;
-
-    code;
-
-    exceptions;
-
-    read(dataView, offset) {
-        this.accessFlags = dataView.getUint16(offset);
-        offset += 2;
-        this.name = this.constantPool.getUtf8(dataView.getUint16(offset)).utf8;
-        offset += 2;
-        this.descriptor = this.constantPool.getUtf8(dataView.getUint16(offset)).utf8;
-        offset += 2;
-        this.type = new JavaType(this.descriptor);
-        this.descriptorParameter = this.type.parameterToString();
-        console.assert(this.type.length === this.descriptor.length);
-        let attributeCount = dataView.getUint16(offset);
-        offset += 2;
-        for (let i = 0; i < attributeCount; i++) {
-            let name = this.constantPool.getUtf8(dataView.getUint16(offset)).utf8;
-            offset += 2;
-            let length = dataView.getUint32(offset);
-            offset += 4;
-            let useOffset = offset + length;
-            switch (name) {
-                case "Exceptions": {
-                    let exceptionCount = dataView.getUint16(offset);
-                    offset += 2;
-                    let exceptions = this.exceptions = new Array(exceptionCount);
-                    for (let i = 0; i < exceptionCount; i++) {
-                        exceptions[i] = this.constantPool.getUtf8(this.constantPool.getClass(dataView.getUint16(offset)).nameIndex).utf8;
-                        offset += 2;
-                    }
-                    break;
-                }
-                case "Code":
-                    let code = this.code = new JavaFileCode(this);
-                    code.method = this;
-                    code.constantPool = this.constantPool;
-                    offset = code.read(dataView, offset);
-                    break;
-                case "Signature":
-                    this.signature = this.constantPool.getUtf8(dataView.getUint16(offset)).utf8;
-                    offset += 2;
-                    break;
-                case "Deprecated":
-                    this.deprecated = true;
-                    break;
-                default:
-                    console.warn(`Unknown method attribute ${name} length ${length}`);
-                    offset += length;
-            }
-            console.assert(useOffset === offset);
-            offset = useOffset;
-        }
-        return offset;
-    }
-
-    async invokeSpecial(...args) {
-        let context = this.defineClass.classLoader.context;
-        let currentThread = context.currentThread;
-        currentThread?.push(this.defineClass, this, this.defineClass.sourceFile, -1);
-        try {
-            if (JavaContext.DEBUG) {
-                console.log("invokeSpecial", this.defineClass.name, this.name, this.descriptor, args);
-            }
-            await this.defineClass.tryInit();
-            context.currentThread = currentThread;
-            if (this.code != null) {
-                return await this.code.invoke(...args);
-            }
-            if ((this.accessFlags & JavaAccessFlags.NATIVE) !== 0) {
-                return await this.defineClass.classLoader.nativeCode(this, ...args);
-            }
-            throw new Error();
-        } finally {
-            currentThread?.pop();
-            context.currentThread = currentThread;
-            if (JavaContext.DEBUG) {
-                console.log("exitSpecial", this.defineClass.name, this.name, this.descriptor);
-            }
-        }
-    }
-
-    async invokeStatic(...args) {
-        let context = this.defineClass.classLoader.context;
-        let currentThread = context.currentThread;
-        currentThread?.push(this.defineClass, this, this.defineClass.sourceFile, -1);
-        try {
-            if (JavaContext.DEBUG) {
-                console.log("invokeStatic", this.defineClass.name, this.name, this.descriptor, args);
-            }
-            await this.defineClass.tryInit();
-            context.currentThread = currentThread;
-            if (this.code != null) {
-                return await this.code.invoke(...args);
-            }
-            if ((this.accessFlags & JavaAccessFlags.NATIVE) !== 0) {
-                return await this.defineClass.classLoader.nativeCode(this, ...args);
-            }
-            throw new Error();
-        } finally {
-            currentThread?.pop();
-            context.currentThread = currentThread;
-            if (JavaContext.DEBUG) {
-                console.log("exitStatic", this.defineClass.name, this.name, this.descriptor);
-            }
-        }
-    }
-
-}
-
 export class JavaFileExceptionTableItem {
     /**
      * @type {number}
@@ -439,15 +316,10 @@ export class JavaFileExceptionTableItem {
     catchType;
 }
 
-export class JavaFileCode {
+export class JavaFileCode extends JavaCode {
     constructor(method) {
-        this.method = method;
+        super(method);
     }
-
-    /**
-     * @type {JavaFileMethod}
-     */
-    method;
 
     /**
      * @type {JavaConstantPool}
@@ -463,13 +335,14 @@ export class JavaFileCode {
      * @type {number}
      */
     maxLocals;
+
     /**
      * @type {DataView}
      */
     code;
 
     /**
-     * @type {JavaFileExceptionTableItem}
+     * @type {JavaFileExceptionTableItem[]}
      */
     exceptions;
 
@@ -523,6 +396,86 @@ export class JavaFileCode {
             offset = useOffset;
         }
         return offset;
+    }
+
+}
+
+export class JavaFileMethod extends JavaMethod {
+    /**
+     * @param {JavaFileClass} c
+     */
+    constructor(c) {
+        super(c);
+        this.constantPool = c.constantPool;
+    }
+
+    /**
+     * @type {JavaConstantPool}
+     */
+    constantPool;
+
+    /**
+     * @type {JavaConstantClass}
+     */
+    exceptions;
+
+    read(dataView, offset) {
+        this.accessFlags = dataView.getUint16(offset);
+        offset += 2;
+        this.name = this.constantPool.getUtf8(dataView.getUint16(offset)).utf8;
+        offset += 2;
+        this.descriptor = this.constantPool.getUtf8(dataView.getUint16(offset)).utf8;
+        offset += 2;
+        this.type = new JavaType(this.descriptor);
+        this.descriptorParameter = this.type.parameterToString();
+        console.assert(this.type.length === this.descriptor.length);
+        let attributeCount = dataView.getUint16(offset);
+        offset += 2;
+        for (let i = 0; i < attributeCount; i++) {
+            let name = this.constantPool.getUtf8(dataView.getUint16(offset)).utf8;
+            offset += 2;
+            let length = dataView.getUint32(offset);
+            offset += 4;
+            let useOffset = offset + length;
+            switch (name) {
+                case "Exceptions": {
+                    let exceptionCount = dataView.getUint16(offset);
+                    offset += 2;
+                    let exceptions = this.exceptions = new Array(exceptionCount);
+                    for (let i = 0; i < exceptionCount; i++) {
+                        exceptions[i] = this.constantPool.getClass(dataView.getUint16(offset)).nameIndex;
+                        offset += 2;
+                    }
+                    break;
+                }
+                case "Code":
+                    let code = this.code = new JavaInterpreterCode(this);
+                    code.method = this;
+                    code.constantPool = this.constantPool;
+                    offset = code.read(dataView, offset);
+                    break;
+                case "Signature":
+                    this.signature = this.constantPool.getUtf8(dataView.getUint16(offset)).utf8;
+                    offset += 2;
+                    break;
+                case "Deprecated":
+                    this.deprecated = true;
+                    break;
+                default:
+                    console.warn(`Unknown method attribute ${name} length ${length}`);
+                    offset += length;
+            }
+            console.assert(useOffset === offset);
+            offset = useOffset;
+        }
+        return offset;
+    }
+
+}
+
+export class JavaInterpreterCode extends JavaFileCode {
+    constructor(method) {
+        super(method);
     }
 
     /**
@@ -687,7 +640,7 @@ export class JavaFileCode {
                                 value = constant.castLong().long;
                                 break;
                             default:
-                                throw new Error(`Unknown ldc ${constant.constructor.name}`);
+                                throw new Error(`Unknown ldc_w ${constant.constructor.name}`);
                         }
                         stack.push(value);
                         if (constant.tag === JavaConstantDouble.TAG || constant.tag === JavaConstantLong.TAG) {
@@ -719,7 +672,7 @@ export class JavaFileCode {
                                 value = constant.castLong().long;
                                 break;
                             default:
-                                throw new Error(`Unknown ldc ${constant.constructor.name}`);
+                                throw new Error(`Unknown ldc2_w ${constant.constructor.name}`);
                         }
                         stack.push(value);
                         if (constant.tag === JavaConstantDouble.TAG || constant.tag === JavaConstantLong.TAG) {
@@ -1011,9 +964,6 @@ export class JavaFileCode {
                         let index = stack.pop();
                         let array = stack.pop();
                         let arrayClass = array.javaClass;
-                        if (arrayClass.name !== "[I") {
-                            throw new Error();
-                        }
                         array.nativeArray[index] = value;
                         break;
                     }
@@ -1023,9 +973,6 @@ export class JavaFileCode {
                         let index = stack.pop();
                         let array = stack.pop();
                         let arrayClass = array.javaClass;
-                        if (arrayClass.name !== "[J") {
-                            throw new Error();
-                        }
                         array.nativeArray[index] = value;
                         break;
                     }
@@ -1034,9 +981,6 @@ export class JavaFileCode {
                         let index = stack.pop();
                         let array = stack.pop();
                         let arrayClass = array.javaClass;
-                        if (arrayClass.name !== "[F") {
-                            throw new Error();
-                        }
                         array.nativeArray[index] = value;
                         break;
                     }
@@ -1046,9 +990,6 @@ export class JavaFileCode {
                         let index = stack.pop();
                         let array = stack.pop();
                         let arrayClass = array.javaClass;
-                        if (arrayClass.name !== "[D") {
-                            throw new Error();
-                        }
                         array.nativeArray[index] = value;
                         break;
                     }
@@ -1056,7 +997,6 @@ export class JavaFileCode {
                         let value = stack.pop();
                         let index = stack.pop();
                         let array = stack.pop();
-                        // todo
                         array.nativeArray[index] = value;
                         break;
                     }
@@ -1065,9 +1005,6 @@ export class JavaFileCode {
                         let index = stack.pop();
                         let array = stack.pop();
                         let arrayClass = array.javaClass;
-                        if (arrayClass.name !== "[B") {
-                            throw new Error();
-                        }
                         array.nativeArray[index] = value;
                         break;
                     }
@@ -1075,10 +1012,6 @@ export class JavaFileCode {
                         let value = stack.pop();
                         let index = stack.pop();
                         let array = stack.pop();
-                        let arrayClass = array.javaClass;
-                        if (arrayClass.name !== "[C") {
-                            throw new Error();
-                        }
                         array.nativeArray[index] = value;
                         break;
                     }
@@ -1087,9 +1020,6 @@ export class JavaFileCode {
                         let index = stack.pop();
                         let array = stack.pop();
                         let arrayClass = array.javaClass;
-                        if (arrayClass.name !== "[S") {
-                            throw new Error();
-                        }
                         array.nativeArray[index] = value;
                         break;
                     }
@@ -1452,14 +1382,12 @@ export class JavaFileCode {
                         stack.pop();
                         let value = stack.pop();
                         stack.push(Number(value));
-                        // fixme
                         break;
                     }
                     case Opcode.l2f: {
                         stack.pop();
                         let value = stack.pop();
                         stack.push(Number(value));
-                        // fixme
                         break;
                     }
                     case Opcode.l2d: {
@@ -1470,37 +1398,31 @@ export class JavaFileCode {
                         break;
                     }
                     case Opcode.f2i : {
-                        let value = stack.pop();
+                        let value = Math.min(Math.max(-0x80000000, stack.pop()), 0x7FFFFFFF);
                         stack.push(value & 0xFFFFFFFF);
                         break;
                     }
                     case Opcode.f2l : {
-                        let value = stack.pop();
+                        let value = Math.min(Math.max(BigInt("-0x8000000000000000"), BigInt(stack.pop())), BigInt("0x7FFFFFFFFFFFFFFF"));
                         stack.push(BigInt.asIntN(64, BigInt(value)));
-                        stack.push(null)
+                        stack.push(null);
                         break;
                     }
                     case Opcode.f2d : {
                         let value = stack.pop();
                         stack.push(value);
-                        stack.push(null)
+                        stack.push(null);
                         break;
                     }
                     case Opcode.d2i : {
                         stack.pop();
-                        let value = stack.pop();
-                        if (value > 0x7FFFFFFF) {
-                            value = 0x7FFFFFFF;
-                        }
-                        if (value < (0x80000000 & 0xFFFFFFFF)) {
-                            value = (0x80000000 & 0xFFFFFFFF);
-                        }
+                        let value = Math.min(Math.max(-0x80000000, stack.pop()), 0x7FFFFFFF);
                         stack.push(value & 0xFFFFFFFF);
                         break;
                     }
                     case Opcode.d2l : {
                         stack.pop();
-                        let value = stack.pop();
+                        let value = Math.min(Math.max(BigInt("-0x8000000000000000"), BigInt(stack.pop())), BigInt("0x7FFFFFFFFFFFFFFF"));
                         stack.push(BigInt.asIntN(64, BigInt(value)));
                         break;
                     }
@@ -1601,7 +1523,7 @@ export class JavaFileCode {
                     }
                     case Opcode.ifeq: {
                         let value = stack.pop();
-                        if (value === 0 || value === false) {
+                        if (value == 0) {
                             pc += code.getInt16(pc) - 1;
                         } else {
                             pc += 2;
@@ -1609,7 +1531,7 @@ export class JavaFileCode {
                         break;
                     }
                     case Opcode.ifne: {
-                        if (stack.pop() !== 0) {
+                        if (stack.pop() != 0) {
                             pc += code.getInt16(pc) - 1;
                         } else {
                             pc += 2;
@@ -1649,7 +1571,7 @@ export class JavaFileCode {
                         break;
                     }
                     case Opcode.if_icmpeq: {
-                        if (stack.pop() === stack.pop()) {
+                        if (stack.pop() == stack.pop()) {
                             pc += code.getInt16(pc) - 1;
                         } else {
                             pc += 2;
@@ -1657,7 +1579,7 @@ export class JavaFileCode {
                         break;
                     }
                     case Opcode.if_icmpne : {
-                        if (stack.pop() !== stack.pop()) {
+                        if (stack.pop() != stack.pop()) {
                             pc += code.getInt16(pc) - 1;
                         } else {
                             pc += 2;
@@ -1697,7 +1619,7 @@ export class JavaFileCode {
                         break;
                     }
                     case Opcode.if_acmpeq: {
-                        if (stack.pop() === stack.pop()) {
+                        if (stack.pop() == stack.pop()) {
                             pc += code.getInt16(pc) - 1;
                         } else {
                             pc += 2;
@@ -1705,7 +1627,7 @@ export class JavaFileCode {
                         break;
                     }
                     case Opcode.if_acmpne: {
-                        if (stack.pop() !== stack.pop()) {
+                        if (stack.pop() != stack.pop()) {
                             pc += code.getInt16(pc) - 1;
                         } else {
                             pc += 2;
@@ -1773,7 +1695,7 @@ export class JavaFileCode {
                             pc += 4;
                             let offset = code.getInt32(pc);
                             pc += 4;
-                            if (key === val) {
+                            if (key == val) {
                                 jmp = offset;
                             }
                             if (key >= val) {
@@ -2170,4 +2092,3 @@ export class JavaFileCode {
     }
 
 }
-

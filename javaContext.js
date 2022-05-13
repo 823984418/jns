@@ -1375,6 +1375,11 @@ export class JavaMethod {
     type;
 
     /**
+     * @type {JavaCode}
+     */
+    code;
+
+    /**
      * @param {any} args
      * @return {Promise<any>}
      */
@@ -1412,7 +1417,29 @@ export class JavaMethod {
      * @return {Promise<any>}
      */
     async invokeSpecial(...args) {
-        throw new Error();
+        let context = this.defineClass.classLoader.context;
+        let currentThread = context.currentThread;
+        currentThread?.push(this.defineClass, this, this.defineClass.sourceFile, -1);
+        try {
+            if (JavaContext.DEBUG) {
+                console.log("invokeSpecial", this.defineClass.name, this.name, this.descriptor, args);
+            }
+            await this.defineClass.tryInit();
+            context.currentThread = currentThread;
+            if (this.code != null) {
+                return await this.code.invoke(...args);
+            }
+            if ((this.accessFlags & JavaAccessFlags.NATIVE) !== 0) {
+                return await this.defineClass.classLoader.nativeCode(this, ...args);
+            }
+            throw new Error();
+        } finally {
+            currentThread?.pop();
+            context.currentThread = currentThread;
+            if (JavaContext.DEBUG) {
+                console.log("exitSpecial", this.defineClass.name, this.name, this.descriptor);
+            }
+        }
     }
 
     /**
@@ -1420,6 +1447,49 @@ export class JavaMethod {
      * @return {Promise<any>}
      */
     async invokeStatic(...args) {
+        let context = this.defineClass.classLoader.context;
+        let currentThread = context.currentThread;
+        currentThread?.push(this.defineClass, this, this.defineClass.sourceFile, -1);
+        try {
+            if (JavaContext.DEBUG) {
+                console.log("invokeStatic", this.defineClass.name, this.name, this.descriptor, args);
+            }
+            await this.defineClass.tryInit();
+            context.currentThread = currentThread;
+            if (this.code != null) {
+                return await this.code.invoke(...args);
+            }
+            if ((this.accessFlags & JavaAccessFlags.NATIVE) !== 0) {
+                return await this.defineClass.classLoader.nativeCode(this, ...args);
+            }
+            throw new Error();
+        } finally {
+            currentThread?.pop();
+            context.currentThread = currentThread;
+            if (JavaContext.DEBUG) {
+                console.log("exitStatic", this.defineClass.name, this.name, this.descriptor);
+            }
+        }
+    }
+
+}
+
+export class JavaCode {
+
+    constructor(method) {
+        this.method = method;
+    }
+
+    /**
+     * @type {JavaFileMethod}
+     */
+    method;
+
+    /**
+     * @param {any} args
+     * @return {Promise<any>}
+     */
+    async invoke(...args) {
         throw new Error();
     }
 
@@ -1472,50 +1542,30 @@ export class JavaDirectClass extends JavaClass {
 
 }
 
+export class JavaDirectCode extends JavaCode {
+    constructor(method, runnable) {
+        super(method);
+        this.runnable = runnable;
+    }
+
+    runnable;
+
+    async invoke(...args) {
+        this.runnable(...args);
+    }
+}
+
 export class JavaDirectMethod extends JavaMethod {
 
     /**
      * @param {number} accessFlags
      * @param {string} name
      * @param {string} descriptor
-     * @param {function(...any):any} code
+     * @param {function(...any):any} runnable
      */
-    constructor(accessFlags, name, descriptor, code) {
+    constructor(accessFlags, name, descriptor, runnable) {
         super(null, accessFlags, name, descriptor);
-        this.code = code;
-    }
-
-    /**
-     * @type {function(...any):any}
-     */
-    code;
-
-    /**
-     * @param {any} args
-     * @return {Promise<any>}
-     */
-    async invokeSpecial(...args) {
-        let context = this.defineClass.classLoader.context;
-        let currentThread = context.currentThread;
-        try {
-            return await this.code(...args);
-        } finally {
-            context.currentThread = currentThread;
-        }
-    }
-
-    /**
-     * @param {any} args
-     * @return {Promise<any>}
-     */
-    async invokeStatic(...args) {
-        let context = this.defineClass.classLoader.context;
-        let currentThread = context.currentThread;
-        try {
-            return await this.code(...args);
-        } finally {
-            context.currentThread = currentThread;
-        }
+        this.code = new JavaDirectCode(this, runnable);
     }
 
 }
