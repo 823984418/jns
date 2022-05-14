@@ -1276,61 +1276,6 @@ export class JavaField {
      */
     type;
 
-    /**
-     * @param {any} value
-     * @return {Promise<void>}
-     */
-    async pusStatic(value) {
-        await this.defineClass.tryInit();
-        this.defineClass.staticTable[this.name] = value;
-    }
-
-    /**
-     * @return {Promise<any>}
-     */
-    async getStatic() {
-        await this.defineClass.tryInit();
-        return this.defineClass.staticTable[this.name];
-    }
-
-    /**
-     * @param {JavaObject} object
-     * @param {any} value
-     * @return {Promise<void>}
-     */
-    async putField(object, value) {
-        let context = this.defineClass.classLoader.context;
-        let currentThread = context.currentThread;
-        await this.defineClass.tryInit();
-        if (object == null) {
-            if (JavaContext.USE_JAVA_ERROR) {
-                context.currentThread = currentThread;
-                throw await context.rootClassLoader.newInstanceWith("java/lang/NullPointerException");
-            } else {
-                throw new Error("NullPointerException");
-            }
-        }
-        object[`${this.defineClass.name}:${this.name}`] = value;
-    }
-
-    /**
-     * @param {JavaObject} object
-     * @return {Promise<any>}
-     */
-    async getField(object) {
-        let context = this.defineClass.classLoader.context;
-        let currentThread = context.currentThread;
-        await this.defineClass.tryInit();
-        if (object == null) {
-            if (JavaContext.USE_JAVA_ERROR) {
-                context.currentThread = currentThread;
-                throw await context.rootClassLoader.newInstanceWith("java/lang/NullPointerException");
-            } else {
-                throw new Error("NullPointerException");
-            }
-        }
-        return object[`${this.defineClass.name}:${this.name}`];
-    }
 }
 
 export class JavaMethod {

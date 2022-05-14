@@ -9,9 +9,11 @@ import {
     JavaType
 } from "./javaContext.js";
 import {
-    JavaConstantClass, JavaConstantDouble,
+    JavaConstantClass,
+    JavaConstantDouble,
     JavaConstantFloat,
-    JavaConstantInteger, JavaConstantLong,
+    JavaConstantInteger,
+    JavaConstantLong,
     JavaConstantPool,
     JavaConstantString
 } from "./javaConstantPool.js";
@@ -1726,11 +1728,13 @@ export class JavaInterpreterCode extends JavaFileCode {
                     case Opcode.return:
                         return;
                     case Opcode.getstatic: {
+                        context.currentThread = currentThread;
                         let fieldRef = await constantPool.getFieldRef(code.getUint16(pc)).getFieldRef();
                         pc += 2;
                         let t = fieldRef.type;
-                        let value = await fieldRef.getStatic();
-                        stack.push(value);
+                        context.currentThread = currentThread;
+                        await fieldRef.defineClass.tryInit();
+                        stack.push(fieldRef.defineClass.staticTable[fieldRef.name]);
                         if (t.T === "D" || t.T === "J") {
                             stack.push(null);
                         }
@@ -1745,16 +1749,26 @@ export class JavaInterpreterCode extends JavaFileCode {
                             stack.pop();
                         }
                         let value = stack.pop();
-                        await fieldRef.pusStatic(value);
+                        context.currentThread = currentThread;
+                        await fieldRef.defineClass.tryInit();
+                        fieldRef.defineClass.staticTable[fieldRef.name] = value;
                         break;
                     }
                     case Opcode.getfield: {
                         context.currentThread = currentThread;
-                        let field = await this.constantPool.getFieldRef(code.getUint16(pc)).getFieldRef();
+                        let fieldRef = await this.constantPool.getFieldRef(code.getUint16(pc)).getFieldRef();
                         pc += 2;
                         let object = stack.pop();
-                        context.currentThread = currentThread;
-                        stack.push(await field.getField(object));
+                        if (object == null) {
+                            if (JavaContext.USE_JAVA_ERROR) {
+                                context.currentThread = currentThread;
+                                throw await context.rootClassLoader.newInstanceWith("java/lang/NullPointerException");
+                            } else {
+                                throw new Error("NullPointerException");
+                            }
+                        }
+                        let value = object[`${fieldRef.defineClass.name}:${fieldRef.name}`];
+                        stack.push(value);
                         break;
                     }
                     case Opcode.putfield: {
@@ -1767,8 +1781,15 @@ export class JavaInterpreterCode extends JavaFileCode {
                         }
                         let value = stack.pop();
                         let object = stack.pop();
-                        context.currentThread = currentThread;
-                        await fieldRef.putField(object, value);
+                        if (object == null) {
+                            if (JavaContext.USE_JAVA_ERROR) {
+                                context.currentThread = currentThread;
+                                throw await context.rootClassLoader.newInstanceWith("java/lang/NullPointerException");
+                            } else {
+                                throw new Error("NullPointerException");
+                            }
+                        }
+                        object[`${fieldRef.defineClass.name}:${fieldRef.name}`] = value;
                         break;
                     }
                     case Opcode.invokevirtual: {
