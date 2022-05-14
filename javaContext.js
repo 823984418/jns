@@ -950,8 +950,8 @@ export class JavaClass {
         let superClassAndInterface = this.superClassAndInterfaceSet = new Set();
         superClassAndInterface.add(this);
         let superClassRef = await this.getSuperClass();
-        context.currentThread = currentThread;
         if (superClassRef != null) {
+            context.currentThread = currentThread;
             await superClassRef.tryInit();
             superClassAndInterface.add(superClassRef);
             for (let si of superClassRef.superClassAndInterfaceSet) {
@@ -1008,7 +1008,6 @@ export class JavaClass {
                 default:
                     value = null;
             }
-            context.currentThread = currentThread;
             if (f.constantValue != null) {
                 switch (f.constantValue.tag) {
                     case JavaConstantLong.TAG:
@@ -1024,9 +1023,11 @@ export class JavaClass {
                         value = f.constantValue.castFloat().float;
                         break;
                     case JavaConstantClass.TAG:
+                        context.currentThread = currentThread;
                         value = await f.constantValue.castClass().getClassRef();
                         break;
                     case JavaConstantString.TAG:
+                        context.currentThread = currentThread;
                         value = await f.constantValue.castString().getStringRef();
                         break;
                     default:
@@ -1036,6 +1037,7 @@ export class JavaClass {
             staticTable[f.name] = value;
         }
 
+        context.currentThread = currentThread;
         let interfaces = await this.getInterfaces();
         for (let i = 0; i < interfaces.length; i++) {
             this.superClassAndInterfaceSet.add(interfaces[i]);
@@ -1043,16 +1045,17 @@ export class JavaClass {
 
         context.currentThread = currentThread;
         await this.methodMap.get("<clinit>()V")?.invokeStatic();
-        context.currentThread = currentThread;
     }
 
     /**
      * @return {Promise<JavaObject>}
      */
     async newInstance() {
+        let context = this.classLoader.context;
+        let currentThread = context.currentThread;
         await this.tryInit();
         let object = Object.create(this.virtualTable);
-        for (let c = this; c != null; c = await c.getSuperClass()) {
+        for (let c = this; c != null; ) {
             for (let f of c.fieldMap.values()) {
                 if ((f.accessFlags & JavaAccessFlags.STATIC) !== 0) {
                     continue;
@@ -1081,6 +1084,8 @@ export class JavaClass {
                 // todo init value read
                 object[`${c.name}:${f.name}`] = value;
             }
+            context.currentThread = currentThread;
+            c = await c.getSuperClass();
         }
         return object;
     }
@@ -1112,7 +1117,6 @@ export class JavaClass {
         for (let i = 0; i < dim; i++) {
             arrayClass = arrayClass.getArrayClass();
         }
-        context.currentThread = currentThread;
         let array = await arrayClass.newInstanceAsArray(thisLength);
         if (dim > 1) {
             let nativeArray = array.nativeArray;
@@ -1297,20 +1301,16 @@ export class JavaField {
     async putField(object, value) {
         let context = this.defineClass.classLoader.context;
         let currentThread = context.currentThread;
-        try {
-            await this.defineClass.tryInit();
-            context.currentThread = currentThread;
-            if (object == null) {
-                if (JavaContext.USE_JAVA_ERROR) {
-                    throw await context.rootClassLoader.newInstanceWith("java/lang/NullPointerException");
-                } else {
-                    throw new Error("NullPointerException");
-                }
+        await this.defineClass.tryInit();
+        if (object == null) {
+            if (JavaContext.USE_JAVA_ERROR) {
+                context.currentThread = currentThread;
+                throw await context.rootClassLoader.newInstanceWith("java/lang/NullPointerException");
+            } else {
+                throw new Error("NullPointerException");
             }
-            object[`${this.defineClass.name}:${this.name}`] = value;
-        } finally {
-            context.currentThread = currentThread;
         }
+        object[`${this.defineClass.name}:${this.name}`] = value;
     }
 
     /**
@@ -1318,9 +1318,16 @@ export class JavaField {
      * @return {Promise<any>}
      */
     async getField(object) {
+        let context = this.defineClass.classLoader.context;
+        let currentThread = context.currentThread;
         await this.defineClass.tryInit();
         if (object == null) {
-            throw new Error(`Nullptr`);
+            if (JavaContext.USE_JAVA_ERROR) {
+                context.currentThread = currentThread;
+                throw await context.rootClassLoader.newInstanceWith("java/lang/NullPointerException");
+            } else {
+                throw new Error("NullPointerException");
+            }
         }
         return object[`${this.defineClass.name}:${this.name}`];
     }
@@ -1386,30 +1393,28 @@ export class JavaMethod {
     async invokeVirtual(...args) {
         let context = this.defineClass.classLoader.context;
         let currentThread = context.currentThread;
-        try {
-            await this.defineClass.tryInit();
-            context.currentThread = currentThread;
-            let thisObject = args.shift();
-            let callArgs = args;
-            if (thisObject == null) {
-                if (JavaContext.USE_JAVA_ERROR) {
-                    throw await context.rootClassLoader.newInstanceWith("java/lang/NullPointerException");
-                } else {
-                    throw new Error("NullPointerException");
-                }
+        await this.defineClass.tryInit();
+        let thisObject = args.shift();
+        let callArgs = args;
+        if (thisObject == null) {
+            if (JavaContext.USE_JAVA_ERROR) {
+                context.currentThread = currentThread;
+                throw await context.rootClassLoader.newInstanceWith("java/lang/NullPointerException");
+            } else {
+                throw new Error("NullPointerException");
             }
-            let method = thisObject[`${this.name}${this.descriptor}`];
-            if (method != null) {
-                return await thisObject[`${this.name}${this.descriptor}`](...callArgs);
-            }
-            method = thisObject[this.name];
-            if (method != null) {
-                return await thisObject[this.name](...callArgs);
-            }
-            throw new Error();
-        } finally {
-            context.currentThread = currentThread;
         }
+        let method = thisObject[`${this.name}${this.descriptor}`];
+        if (method != null) {
+            context.currentThread = currentThread;
+            return await thisObject[`${this.name}${this.descriptor}`](...callArgs);
+        }
+        method = thisObject[this.name];
+        if (method != null) {
+            context.currentThread = currentThread;
+            return await thisObject[this.name](...callArgs);
+        }
+        throw new Error();
     }
 
     /**
@@ -1425,17 +1430,17 @@ export class JavaMethod {
                 console.log("invokeSpecial", this.defineClass.name, this.name, this.descriptor, args);
             }
             await this.defineClass.tryInit();
-            context.currentThread = currentThread;
             if (this.code != null) {
+                context.currentThread = currentThread;
                 return await this.code.invoke(...args);
             }
             if ((this.accessFlags & JavaAccessFlags.NATIVE) !== 0) {
+                context.currentThread = currentThread;
                 return await this.defineClass.classLoader.nativeCode(this, ...args);
             }
             throw new Error();
         } finally {
             currentThread?.pop();
-            context.currentThread = currentThread;
             if (JavaContext.DEBUG) {
                 console.log("exitSpecial", this.defineClass.name, this.name, this.descriptor);
             }
@@ -1455,17 +1460,17 @@ export class JavaMethod {
                 console.log("invokeStatic", this.defineClass.name, this.name, this.descriptor, args);
             }
             await this.defineClass.tryInit();
-            context.currentThread = currentThread;
             if (this.code != null) {
+                context.currentThread = currentThread;
                 return await this.code.invoke(...args);
             }
             if ((this.accessFlags & JavaAccessFlags.NATIVE) !== 0) {
+                context.currentThread = currentThread;
                 return await this.defineClass.classLoader.nativeCode(this, ...args);
             }
             throw new Error();
         } finally {
             currentThread?.pop();
-            context.currentThread = currentThread;
             if (JavaContext.DEBUG) {
                 console.log("exitStatic", this.defineClass.name, this.name, this.descriptor);
             }

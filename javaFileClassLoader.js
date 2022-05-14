@@ -590,9 +590,11 @@ export class JavaInterpreterCode extends JavaFileCode {
                         let value;
                         switch (constant.tag) {
                             case JavaConstantString.TAG:
+                                context.currentThread = currentThread;
                                 value = await constant.castString().getStringRef();
                                 break;
                             case JavaConstantClass.TAG:
+                                context.currentThread = currentThread;
                                 value = await (await constant.castClass().getClassRef()).getClassObject();
                                 break;
                             case JavaConstantFloat.TAG:
@@ -622,9 +624,11 @@ export class JavaInterpreterCode extends JavaFileCode {
                         let value;
                         switch (constant.tag) {
                             case JavaConstantString.TAG:
+                                context.currentThread = currentThread;
                                 value = await constant.castString().getStringRef();
                                 break;
                             case JavaConstantClass.TAG:
+                                context.currentThread = currentThread;
                                 value = await (await constant.castClass().getClassRef()).getClassObject();
                                 break;
                             case JavaConstantFloat.TAG:
@@ -654,9 +658,11 @@ export class JavaInterpreterCode extends JavaFileCode {
                         let value;
                         switch (constant.tag) {
                             case JavaConstantString.TAG:
+                                context.currentThread = currentThread;
                                 value = await constant.castString().getStringRef();
                                 break;
                             case JavaConstantClass.TAG:
+                                context.currentThread = currentThread;
                                 value = await (await constant.castClass().getClassRef()).getClassObject();
                                 break;
                             case JavaConstantFloat.TAG:
@@ -1731,6 +1737,7 @@ export class JavaInterpreterCode extends JavaFileCode {
                         break;
                     }
                     case Opcode.putstatic: {
+                        context.currentThread = currentThread;
                         let fieldRef = await constantPool.getFieldRef(code.getUint16(pc)).getFieldRef();
                         pc += 2;
                         let t = fieldRef.type;
@@ -1742,13 +1749,16 @@ export class JavaInterpreterCode extends JavaFileCode {
                         break;
                     }
                     case Opcode.getfield: {
+                        context.currentThread = currentThread;
                         let field = await this.constantPool.getFieldRef(code.getUint16(pc)).getFieldRef();
                         pc += 2;
                         let object = stack.pop();
+                        context.currentThread = currentThread;
                         stack.push(await field.getField(object));
                         break;
                     }
                     case Opcode.putfield: {
+                        context.currentThread = currentThread;
                         let fieldRef = await constantPool.getFieldRef(code.getUint16(pc)).getFieldRef();
                         pc += 2;
                         let t = fieldRef.type;
@@ -1757,10 +1767,12 @@ export class JavaInterpreterCode extends JavaFileCode {
                         }
                         let value = stack.pop();
                         let object = stack.pop();
+                        context.currentThread = currentThread;
                         await fieldRef.putField(object, value);
                         break;
                     }
                     case Opcode.invokevirtual: {
+                        context.currentThread = currentThread;
                         let methodRef = await constantPool.getMethodRef(code.getUint16(pc)).getMethodRef();
                         pc += 2;
                         let args = new Array(methodRef.type.P.length + 1);
@@ -1784,6 +1796,7 @@ export class JavaInterpreterCode extends JavaFileCode {
                         break;
                     }
                     case Opcode.invokespecial: {
+                        context.currentThread = currentThread;
                         let methodRef = await constantPool.getMethodRef(code.getUint16(pc)).getMethodRef();
                         pc += 2;
                         let args = new Array(methodRef.type.P.length + 1);
@@ -1807,6 +1820,7 @@ export class JavaInterpreterCode extends JavaFileCode {
                         break;
                     }
                     case Opcode.invokestatic: {
+                        context.currentThread = currentThread;
                         let methodRef = await constantPool.getMethodRef(code.getUint16(pc)).getMethodRef();
                         pc += 2;
                         let args = new Array(methodRef.type.P.length);
@@ -1829,6 +1843,7 @@ export class JavaInterpreterCode extends JavaFileCode {
                         break;
                     }
                     case Opcode.invokeinterface: {
+                        context.currentThread = currentThread;
                         let methodRef = await constantPool.getInterfaceMethod(code.getUint16(pc)).getInterfaceMethodRef();
                         pc += 2;
                         let argCount = code.getUint8(pc);
@@ -1855,10 +1870,14 @@ export class JavaInterpreterCode extends JavaFileCode {
                         }
                         break;
                     }
-                    case Opcode.new:
-                        stack.push(await (await constantPool.getClass(code.getUint16(pc)).getClassRef()).newInstance());
+                    case Opcode.new: {
+                        context.currentThread = currentThread;
+                        let classRef = await constantPool.getClass(code.getUint16(pc)).getClassRef();
+                        context.currentThread = currentThread;
+                        stack.push(await classRef.newInstance());
                         pc += 2;
                         break;
+                    }
                     case Opcode.newarray: {
                         let type = code.getUint8(pc);
                         pc += 1;
@@ -1899,6 +1918,7 @@ export class JavaInterpreterCode extends JavaFileCode {
                         break;
                     }
                     case Opcode.anewarray: {
+                        context.currentThread = currentThread;
                         let type = await this.constantPool.getClass(code.getUint16(pc)).getClassRef();
                         pc += 2;
                         let length = stack.pop();
@@ -1916,18 +1936,18 @@ export class JavaInterpreterCode extends JavaFileCode {
                         throw stack.pop();
                     }
                     case Opcode.checkcast: {
+                        context.currentThread = currentThread;
                         let type = await constantPool.getClass(code.getUint16(pc)).getClassRef();
                         pc += 2;
                         let obj = stack.pop();
-                        context.currentThread = currentThread;
                         stack.push(type.checkCast(obj));
                         break;
                     }
                     case Opcode.instanceof: {
+                        context.currentThread = currentThread;
                         let type = await constantPool.getClass(code.getUint16(pc)).getClassRef();
                         pc += 2;
                         let object = stack.pop();
-                        context.currentThread = currentThread;
                         stack.push(type.instanceOf(object));
                         break;
                     }
@@ -2026,6 +2046,7 @@ export class JavaInterpreterCode extends JavaFileCode {
                         break;
                     }
                     case Opcode.multianewarray: {
+                        context.currentThread = currentThread;
                         let type = await this.constantPool.getClass(code.getUint16(pc)).getClassRef();
                         pc += 2;
                         let dimensions = code.getUint8(pc);
@@ -2084,8 +2105,6 @@ export class JavaInterpreterCode extends JavaFileCode {
                     }
                 }
                 throw e;
-            } finally {
-                context.currentThread = currentThread;
             }
         }
 
